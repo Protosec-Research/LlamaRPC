@@ -1,23 +1,28 @@
 from llamarpc.connection import LlamaRPCConnection
 from llamarpc.types import RPCTensor, TensorType
-import time
+from llamarpc.logger import logger, console
+from rich.panel import Panel
+from rich.table import Table
 
 def main():
-    # Connect to the RPC server with debug enabled
+    conn = None
     try:
+        console.print(Panel("[bold blue]Initializing LlamaRPC Connection", border_style="blue"))
         conn = LlamaRPCConnection("127.0.0.1", 50052)
-        print("Successfully connected to RPC server")
+        
+        with console.status("[bold green]Testing buffer allocation..."):
+            buffer_size = 1024
+            buffer = conn.alloc_buffer(buffer_size)
+            if buffer is None:
+                console.print("[bold red]Failed to allocate buffer")
+                return
+            console.print(f"[bold green]Successfully allocated buffer at {hex(buffer)}")
 
-        # Test device memory info
-
-        # Allocate a buffer
-        print("\n=== Testing Buffer Allocation ===")
-        buffer_size = 1024  # 1MB
-        buffer = conn.alloc_buffer(buffer_size)
-        print(f"Allocated buffer at {hex(buffer.remote_ptr)} with size {buffer.remote_size}")
-
-        # Create a sample tensor
-        print("\n=== Testing Tensor Operations ===")
+        # Create a table for tensor details
+        tensor_table = Table(title="Tensor Configuration")
+        tensor_table.add_column("Property", style="cyan")
+        tensor_table.add_column("Value", style="green")
+        
         tensor = RPCTensor(
             id=1,
             type=TensorType.Q4_0,
@@ -33,26 +38,32 @@ def main():
             data=0,
             name="test_tensor"
         )
+        
+        # Add tensor properties to table
+        for field, value in tensor.__dict__.items():
+            tensor_table.add_row(field, str(value))
+        
+        console.print(tensor_table)
 
-        # Set tensor
-        conn.set_tensor(tensor)
-        print("Successfully set tensor")
+        with console.status("[bold yellow]Processing operations...") as status:
+            status.update("[bold blue]Setting tensor...")
+            conn.set_tensor(tensor)
+            console.print("[bold green]Successfully set tensor")
 
-        # Clear buffer
-        print("\n=== Testing Buffer Clear ===")
-        conn.buffer_clear(buffer.remote_ptr, 0)
-        print("Successfully cleared buffer")
+            status.update("[bold blue]Clearing buffer...")
+            conn.buffer_clear(buffer.remote_ptr, 0)
+            console.print("[bold green]Successfully cleared buffer")
 
-        # Free buffer
-        print("\n=== Testing Buffer Free ===")
-        conn.free_buffer(buffer.remote_ptr)
-        print("Successfully freed buffer")
+            status.update("[bold blue]Freeing buffer...")
+            conn.free_buffer(buffer.remote_ptr)
+            console.print("[bold green]Successfully freed buffer")
 
     except Exception as e:
-        print(f"Error: {e}")
+        console.print_exception()
     finally:
-        conn.close()
-        print("Connection closed")
+        if conn:
+            conn.close()
+        console.print("[bold blue]Connection closed")
 
 if __name__ == "__main__":
     main()
