@@ -1,54 +1,124 @@
-import socket
 import struct
-from typing import Optional, Tuple
+import socket
+from typing import Optional, Tuple, Any
 from .constants import RPCCommands
 from .exceptions import RPCConnectionError
-from .types import TensorParams
+from .types import (
+    AllocBufferRequest, AllocBufferResponse,
+    GetAlignmentResponse, GetMaxSizeResponse,
+    BufferGetBaseRequest, BufferGetBaseResponse,
+    FreeBufferRequest, BufferClearRequest,
+    GetTensorRequest, CopyTensorRequest,
+    CopyTensorResponse, GraphComputeResponse,
+    GetDeviceMemoryResponse, RPCTensor
+)
+from .tensor import TensorBuilder
 
 class LlamaRPCConnection:
-    def __init__(self, host: str = "127.0.0.1", port: int = 50052):
-        self.host = host
-        self.port = port
+    def __init__(self, host: str, port: int):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect()
+        self.socket.connect((host, port))
+        
+    def _pack_message(self, cmd: RPCCommands, payload: bytes) -> bytes:
+        msg_len = len(payload)
+        header = struct.pack('<II', cmd, msg_len)
+        print(f"Sending command: {cmd.name} with payload length: {msg_len}")
+        return header + payload
 
-    def connect(self) -> None:
-        try:
-            self.socket.connect((self.host, self.port))
-        except socket.error as e:
-            raise RPCConnectionError(f"Failed to connect: {e}")
-
-    def _pack_message(self, cmd: RPCCommands, content: bytes) -> bytes:
-        return struct.pack('<B', cmd) + struct.pack('<Q', len(content)) + content
-
-    def _receive(self, size: int, timeout: float = 1.0) -> bytes:
-        self.socket.settimeout(timeout)
-        try:
-            data = self.socket.recv(size)
-            if not data:
+    def _receive(self, expected_size: int) -> bytes:
+        data = bytearray()
+        while len(data) < expected_size:
+            chunk = self.socket.recv(expected_size - len(data))
+            if not chunk:
                 raise RPCConnectionError("Connection closed by remote host")
-            return data
-        except socket.timeout:
-            raise RPCConnectionError("Receive timeout")
+            data.extend(chunk)
+        return bytes(data)
 
-    def alloc_buffer(self, size: int) -> int:
-        content = struct.pack('<Q', size)
-        packed = self._pack_message(RPCCommands.ALLOC_BUFFER, content)
+    def _receive_response(self, expected_size: int) -> Tuple[int, bytes]:
+        header = self._receive(8)
+        status, size = struct.unpack('<II', header)
+        if size > 0:
+            payload = self._receive(size)
+        else:
+            payload = b''
+        return status, payload
+
+    def alloc_buffer(self, size: int) -> AllocBufferResponse:
+        req = AllocBufferRequest(size=size)
+        payload = struct.pack('<Q', req.size)
+        packed = self._pack_message(RPCCommands.ALLOC_BUFFER, payload)
         self.socket.send(packed)
         
-        recv = self._receive(0x20)
-        if len(recv) >= 0x10:
-            return struct.unpack('<Q', recv[0x8:0x10])[0]
+        status, response = self._receive_response(16)
+        if status == 0:
+            remote_ptr, remote_size = struct.unpack('<QQ', response)
+            return AllocBufferResponse(remote_ptr=remote_ptr, remote_size=remote_size)
         raise RPCConnectionError("Failed to allocate buffer")
 
-    def get_base(self, ptr: int) -> int:
-        content = struct.pack('<Q', ptr)
-        packed = self._pack_message(RPCCommands.BUFFER_GET_BASE, content)
+    def get_alignment(self) -> GetAlignmentResponse:
+        packed = self._pack_message(RPCCommands.GET_ALIGNMENT, b'')
         self.socket.send(packed)
         
-        recv = self._receive(0x20)
-        if len(recv) >= 0x10:
-            return struct.unpack('<Q', recv[0x8:0x10])[0]
+        status, response = self._receive_response(8)
+        if status == 0:
+            alignment = struct.unpack('<Q', response)[0]
+            return GetAlignmentResponse(alignment=alignment)
+        raise RPCConnectionError("Failed to get alignment")
+
+    def get_max_size(self) -> GetMaxSizeResponse:
+        packed = self._pack_message(RPCCommands.GET_MAX_SIZE, b'')
+        self.socket.send(packed)
+        
+        status, response = self._receive_response(8)
+        if status == 0:
+            max_size = struct.unpack('<Q', response)[0]
+            return GetMaxSizeResponse(max_size=max_size)
+        raise RPCConnectionError("Failed to get max size")
+
+    def get_base(self, remote_ptr: int) -> BufferGetBaseResponse:
+        req = BufferGetBaseRequest(remote_ptr=remote_ptr)
+        payload = struct.pack('<Q', req.remote_ptr)
+        packed = self._pack_message(RPCCommands.BUFFER_GET_BASE, payload)
+        self.socket.send(packed)
+        
+        status, response = self._receive_response(8)
+        if status == 0:
+            base_ptr = struct.unpack('<Q', response)[0]
+            return BufferGetBaseResponse(base_ptr=base_ptr)
+        raise RPCConnectionError("Failed to get base pointer")
+
+    def free_buffer(self, remote_ptr: int) -> None:
+        req = FreeBufferRequest(remote_ptr=remote_ptr)
+        payload = struct.pack('<Q', req.remote_ptr)
+        packed = self._pack_message(RPCCommands.FREE_BUFFER, payload)
+        self.socket.send(packed)
+        
+        status, _ = self._receive_response(0)
+        if status != 0:
+            raise RPCConnectionError("Failed to free buffer")
+
+    def buffer_clear(self, remote_ptr: int, value: int) -> None:
+        req = BufferClearRequest(remote_ptr=remote_ptr, value=value)
+        payload = struct.pack('<QB', req.remote_ptr, req.value)
+        packed = self._pack_message(RPCCommands.BUFFER_CLEAR, payload)
+        self.socket.send(packed)
+        
+        status, _ = self._receive_response(0)
+        if status != 0:
+            raise RPCConnectionError("Failed to clear buffer")
+
+    def set_tensor(self, tensor: RPCTensor) -> None:
+        payload = TensorBuilder.pack_tensor(tensor)
+        packed = self._pack_message(RPCCommands.SET_TENSOR, payload)
+        self.socket.send(packed)
+        
+        status, _ = self._receive_response(0)
+        if status != 0:
+            raise RPCConnectionError("Failed to set tensor")
+
+    def get_tensor(self, tensor: RPCTensor, offset: int, size: int) -> bytes:
+        req = GetTensorRequest(tensor=tensor, offset=offset, size=size)
+        payload = TensorBuilder.pack_tensor(req.tensor) + struct.pack('<QQ', recv[0x8:0x10])[0]
         raise RPCConnectionError("Failed to get base pointer")
 
     def copy_tensor(self, tensor_src: bytes, tensor_dst: bytes) -> None:
