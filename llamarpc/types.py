@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 from enum import IntEnum
+from ctypes import c_uint64, c_uint32, c_int32, c_uint8, c_char
 
 GGML_MAX_DIMS = 4
 GGML_MAX_OP_PARAMS = 32
@@ -13,59 +14,59 @@ class TensorType(IntEnum):
 
 @dataclass
 class RPCTensor:
-    id: int          # uint64_t
-    type: int        # uint32_t
-    buffer: int      # uint64_t
-    ne: List[int]    # uint32_t[GGML_MAX_DIMS]
-    nb: List[int]    # uint32_t[GGML_MAX_DIMS]
-    op: int          # uint32_t
-    op_params: List[int]  # int32_t[GGML_MAX_OP_PARAMS]
-    flags: int       # int32_t
-    src: List[int]   # uint64_t[GGML_MAX_SRC]
-    view_src: int    # uint64_t
-    view_offs: int   # uint64_t
-    data: int        # uint64_t
+    id: c_uint64
+    type: c_uint32
+    buffer: c_uint64
+    ne: List[c_uint32]    # uint32_t[GGML_MAX_DIMS]
+    nb: List[c_uint32]    # uint32_t[GGML_MAX_DIMS]
+    op: c_uint32
+    op_params: List[c_int32]  # int32_t[GGML_MAX_OP_PARAMS]
+    flags: c_int32
+    src: List[c_uint64]   # uint64_t[GGML_MAX_SRC]
+    view_src: c_uint64
+    view_offs: c_uint64
+    data: c_uint64
     name: str        # char[GGML_MAX_NAME]
 
 @dataclass
 class AllocBufferRequest:
-    size: int        # uint64_t
+    size: c_uint64
 
 @dataclass
 class AllocBufferResponse:
-    remote_ptr: int  # uint64_t
-    remote_size: int # uint64_t
+    remote_ptr: c_uint64
+    remote_size: c_uint64
 
 @dataclass
 class GetAlignmentResponse:
-    alignment: int   # uint64_t
+    alignment: c_uint64
 
 @dataclass
 class GetMaxSizeResponse:
-    max_size: int    # uint64_t
+    max_size: c_uint64
 
 @dataclass
 class BufferGetBaseRequest:
-    remote_ptr: int  # uint64_t
+    remote_ptr: c_uint64
 
 @dataclass
 class BufferGetBaseResponse:
-    base_ptr: int    # uint64_t
+    base_ptr: c_uint64
 
 @dataclass
 class FreeBufferRequest:
-    remote_ptr: int  # uint64_t
+    remote_ptr: c_uint64
 
 @dataclass
 class BufferClearRequest:
-    remote_ptr: int  # uint64_t
-    value: int       # uint8_t
+    remote_ptr: c_uint64
+    value: c_uint8
 
 @dataclass
 class GetTensorRequest:
     tensor: RPCTensor
-    offset: int      # uint64_t
-    size: int        # uint64_t
+    offset: c_uint64
+    size: c_uint64
 
 @dataclass
 class CopyTensorRequest:
@@ -74,13 +75,13 @@ class CopyTensorRequest:
 
 @dataclass
 class CopyTensorResponse:
-    result: int      # uint8_t
+    result: c_uint8
 
 @dataclass
 class GraphComputeResponse:
-    result: int      # uint8_t
+    result: c_uint8
 
 @dataclass
 class GetDeviceMemoryResponse:
-    free_mem: int    # uint64_t
-    total_mem: int   # uint64_t
+    free_mem: c_uint64
+    total_mem: c_uint64
