@@ -30,6 +30,7 @@ class RPCTensor:
     data: c_uint64
     name: str        # char[GGML_MAX_NAME]
 
+
 @dataclass
 class RPCRequest:
     pass
@@ -44,11 +45,30 @@ class AllocBufferRequest(RPCRequest):
     size: c_uint64
 
 @dataclass
-class BufferGetBaseRequest(RPCRequest):
-    remote_ptr: c_uint64
+class GetMaxSizeResponse:
+    max_size: c_uint64
 
 @dataclass
-class FreeBufferRequest(RPCRequest):
+class BufferGetBaseResponse:
+    base_ptr: c_uint64
+
+@dataclass
+class CopyTensorResponse:
+    result: c_uint8
+
+@dataclass
+class GraphComputeResponse:
+    result: c_uint8
+
+@dataclass
+class GetDeviceMemoryResponse:
+    free_mem: c_uint64
+    total_mem: c_uint64
+
+
+# Requests
+@dataclass
+class FreeBufferRequest:
     remote_ptr: c_uint64
 
 @dataclass
@@ -60,6 +80,13 @@ class BufferClearRequest(RPCRequest):
 class GetTensorRequest(RPCRequest):
     tensor: RPCTensor
     offset: c_uint64
+    size: c_uint64
+@dataclass
+class BufferGetBaseRequest:
+    remote_ptr: c_uint64
+
+@dataclass
+class AllocBufferRequest:
     size: c_uint64
 
 @dataclass
@@ -87,6 +114,8 @@ class BufferGetBaseResponse(RPCResponse):
     base_ptr: c_uint64
 
 @dataclass
+class BasicResponse:
+    success: c_uint8
 class CopyTensorResponse(RPCResponse):
     result: c_uint8
 

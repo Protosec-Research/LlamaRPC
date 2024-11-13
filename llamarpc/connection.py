@@ -10,7 +10,7 @@ from .types import (
     FreeBufferRequest, BufferClearRequest,
     GetTensorRequest, CopyTensorRequest,
     CopyTensorResponse, GraphComputeResponse,
-    GetDeviceMemoryResponse, RPCTensor
+    GetDeviceMemoryResponse, RPCTensor, BasicResponse
 )
 from .tensor import TensorBuilder
 from .logger import logger
@@ -29,8 +29,7 @@ class LlamaRPCConnection:
         packed = header + payload
         
         logger.debug(f"Sending command: {cmd.name} ({cmd.value})")
-        logger.debug(f"hex    {' '.join(f'{b:02x}' for b in packed)}")
-        logger.debug(f"ascii  {''.join(chr(b) if 32 <= b <= 126 else '.' for b in packed)}")
+        logger.debug(f"HEX    {' '.join(f'{b:02x}' for b in packed)}")
         
         return packed
 
@@ -44,14 +43,12 @@ class LlamaRPCConnection:
                 raise RPCConnectionError("Connection closed by remote host")
             
             logger.debug(f"Received chunk ({len(chunk)} bytes):")
-            logger.debug(f"hex    {' '.join(f'{b:02x}' for b in chunk)}")
-            logger.debug(f"ascii  {''.join(chr(b) if 32 <= b <= 126 else '.' for b in chunk)}")
+            logger.debug(f"HEX    {' '.join(f'{b:02x}' for b in chunk)}")
             
             data.extend(chunk)
         
         logger.debug(f"Complete received data ({len(data)} bytes):")
         logger.debug(f"hex    {' '.join(f'{b:02x}' for b in data)}")
-        logger.debug(f"ascii  {''.join(chr(b) if 32 <= b <= 126 else '.' for b in data)}")
         
         return bytes(data)
 
@@ -111,6 +108,12 @@ class LlamaRPCConnection:
         
         # Receive the entire payload
         payload = self._receive(total_size)
+        
+        # Check for basic success response (8 null bytes)
+        if total_size == 8 and all(b == 0 for b in payload):
+            if response_type is None:
+                return total_size, BasicResponse(success=1)
+        
         if response_type:
             return total_size, self._decode_response(response_type, payload)
         return total_size, payload
@@ -163,8 +166,8 @@ class LlamaRPCConnection:
         packed = self._pack_message(RPCCommands.FREE_BUFFER, payload)
         self.socket.send(packed)
         
-        total_size, _ = self._receive_response()
-        if total_size <= 8:
+        _, response = self._receive_response(BasicResponse)
+        if not response or not response.success:
             raise RPCConnectionError("Failed to free buffer")
 
     def buffer_clear(self, remote_ptr: int, value: int) -> None:
@@ -173,8 +176,8 @@ class LlamaRPCConnection:
         packed = self._pack_message(RPCCommands.BUFFER_CLEAR, payload)
         self.socket.send(packed)
         
-        total_size, _ = self._receive_response()
-        if total_size <= 8:
+        _, response = self._receive_response(BasicResponse)
+        if not response or not response.success:
             raise RPCConnectionError("Failed to clear buffer")
 
     def set_tensor(self, tensor: RPCTensor) -> None:
@@ -182,8 +185,8 @@ class LlamaRPCConnection:
         packed = self._pack_message(RPCCommands.SET_TENSOR, payload)
         self.socket.send(packed)
         
-        total_size, _ = self._receive_response()
-        if total_size <= 8:
+        _, response = self._receive_response(BasicResponse)
+        if not response or not response.success:
             raise RPCConnectionError("Failed to set tensor")
 
     def get_tensor(self, tensor: RPCTensor, offset: int, size: int) -> bytes:
