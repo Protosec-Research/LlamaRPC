@@ -3,11 +3,13 @@ from typing import List
 from enum import IntEnum
 from ctypes import c_uint64, c_uint32, c_int32, c_uint8, c_char
 
+# Constants
 GGML_MAX_DIMS = 4
 GGML_MAX_OP_PARAMS = 32
 GGML_MAX_SRC = 10
 GGML_MAX_NAME = 64
 
+# Base types
 class TensorType(IntEnum):
     Q4_0 = 2
     # Add other tensor types as needed
@@ -29,59 +31,70 @@ class RPCTensor:
     name: str        # char[GGML_MAX_NAME]
 
 @dataclass
-class AllocBufferRequest:
+class RPCRequest:
+    pass
+
+@dataclass
+class RPCResponse:
+    pass
+
+# All Request classes
+@dataclass
+class AllocBufferRequest(RPCRequest):
     size: c_uint64
 
 @dataclass
-class AllocBufferResponse:
-    remote_ptr: c_uint64
-    remote_size: c_uint64
-
-@dataclass
-class GetAlignmentResponse:
-    alignment: c_uint64
-
-@dataclass
-class GetMaxSizeResponse:
-    max_size: c_uint64
-
-@dataclass
-class BufferGetBaseRequest:
+class BufferGetBaseRequest(RPCRequest):
     remote_ptr: c_uint64
 
 @dataclass
-class BufferGetBaseResponse:
-    base_ptr: c_uint64
-
-@dataclass
-class FreeBufferRequest:
+class FreeBufferRequest(RPCRequest):
     remote_ptr: c_uint64
 
 @dataclass
-class BufferClearRequest:
+class BufferClearRequest(RPCRequest):
     remote_ptr: c_uint64
     value: c_uint8
 
 @dataclass
-class GetTensorRequest:
+class GetTensorRequest(RPCRequest):
     tensor: RPCTensor
     offset: c_uint64
     size: c_uint64
 
 @dataclass
-class CopyTensorRequest:
+class CopyTensorRequest(RPCRequest):
     src: RPCTensor
     dst: RPCTensor
 
+
+# All Response classes
 @dataclass
-class CopyTensorResponse:
+class AllocBufferResponse(RPCResponse):
+    remote_ptr: c_uint64
+    remote_size: c_uint64
+
+@dataclass
+class GetAlignmentResponse(RPCResponse):
+    alignment: c_uint64
+
+@dataclass
+class GetMaxSizeResponse(RPCResponse):
+    max_size: c_uint64
+
+@dataclass
+class BufferGetBaseResponse(RPCResponse):
+    base_ptr: c_uint64
+
+@dataclass
+class CopyTensorResponse(RPCResponse):
     result: c_uint8
 
 @dataclass
-class GraphComputeResponse:
+class GraphComputeResponse(RPCResponse):
     result: c_uint8
 
 @dataclass
-class GetDeviceMemoryResponse:
+class GetDeviceMemoryResponse(RPCResponse):
     free_mem: c_uint64
     total_mem: c_uint64
