@@ -4,12 +4,11 @@ A Python RPC client library for interacting with LLaMA servers. This library pro
 
 ## Features
 
-- 🔌 TCP socket-based RPC communication
-- 📦 Buffer allocation and management
-- 🧮 Tensor operations (get, set, copy)
-- 📊 Graph computation support
-- 💾 Device memory information
-- 🪵 Rich logging with detailed debugging
+- TCP socket-based RPC communication
+- Buffer allocation and management
+- Tensor operations (get, set, copy)
+- Graph computation support
+- Device memory information
 
 ## Installation 
 
